@@ -34,7 +34,7 @@ function error {
 _raw_base="https://raw.githubusercontent.com/ImNotNikola/proxmox-scripts/main/lxc/nginx-proxy-manager"
 # Operating system
 _os_type=debian
-_os_version=12.0
+_os_version=11
 # System architecture
 _arch=$(dpkg --print-architecture)
 
@@ -100,7 +100,7 @@ _memory=${_memory:-512}
 _swap=${_swap:-0}
 _storage=${_storage:-DiskStore}
 _storage_template=${_storage_template:-local}
-_template='debian-12-standard_12.0-1_amd64.tar.zst'
+_template='debian-11-standard_11.7-1_amd64.tar.zst'
 
 # Test if ID is in use
 if pct status $_ctid &>/dev/null; then
