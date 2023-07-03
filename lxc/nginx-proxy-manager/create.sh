@@ -31,10 +31,10 @@ function error {
 }
 
 # Base raw github URL
-_raw_base="https://raw.githubusercontent.com/ej52/proxmox-scripts/main/lxc/nginx-proxy-manager"
+_raw_base="https://raw.githubusercontent.com/ImNotNikola/proxmox-scripts/main/lxc/nginx-proxy-manager"
 # Operating system
-_os_type=alpine
-_os_version=3.16
+_os_type=debian
+_os_version=12.0
 # System architecture
 _arch=$(dpkg --print-architecture)
 
@@ -94,12 +94,13 @@ done
 _ctid=${_ctid:-`pvesh get /cluster/nextid`}
 _cpu_cores=${_cpu_cores:-1}
 _disk_size=${_disk_size:-2G}
-_host_name=${_host_name:-nginx-proxy-manager}
+_host_name=${_host_name:-nginx}
 _bridge=${_bridge:-vmbr0}
 _memory=${_memory:-512}
 _swap=${_swap:-0}
-_storage=${_storage:-local-lvm}
+_storage=${_storage:-DiskStore}
 _storage_template=${_storage_template:-local}
+_template='debian-12-standard_12.0-1_amd64.tar.zst'
 
 # Test if ID is in use
 if pct status $_ctid &>/dev/null; then
@@ -121,49 +122,18 @@ warn "bridge:   $_bridge"
 warn "storage:  $_storage"
 warn "templates:  $_storage_template"
 warn ""
-warn "If you want to abort, hit ctrl+c within 10 seconds..."
 echo ""
 
-sleep 10
-
-# Download latest Alpine LXC template
-info "Updating LXC template list..."
-pveam update &>/dev/null
-
-info "Downloading LXC template..."
-mapfile -t _templates < <(pveam available -section system | sed -n "s/.*\($_os_type-$_os_version.*\)/\1/p" | sort -t - -k 2 -V)
-[ ${#_templates[@]} -eq 0 ] \
-  && error "No LXC template found for $_os_type-$_os_version"
-
-_template="${_templates[-1]}"
-pveam download $_storage_template $_template &>/dev/null \
-  || error "A problem occured while downloading the LXC template."
-
-# Create variables for container disk
-_storage_type=$(pvesm status -storage $_storage 2>/dev/null | awk 'NR>1 {print $2}')
-case $_storage_type in
-  btrfs|dir|nfs)
-    _disk_ext=".raw"
-    _disk_ref="$_ctid/"
-    ;;
-  zfspool)
-    _disk_prefix="subvol"
-    _disk_format="subvol"
-    ;;
-esac
-_disk=${_disk_prefix:-vm}-${_ctid}-disk-0${_disk_ext-}
+_disk_ref="$_ctid/"
+_disk_prefix="subvol"
+_disk_format="subvol"
+_disk="${_disk_prefix}-${_ctid}-disk-0"
 _rootfs=${_storage}:${_disk_ref-}${_disk}
 
 # Create LXC
 info "Allocating storage for LXC container..."
-pvesm alloc $_storage $_ctid $_disk $_disk_size --format ${_disk_format:-raw} &>/dev/null \
+pvesm alloc $_storage $_ctid $_disk $_disk_size --format ${_disk_format} &>/dev/null \
   || error "A problem occured while allocating storage."
-
-if [ "$_storage_type" = "zfspool" ]; then
-  warn "Some containers may not work properly due to ZFS not supporting 'fallocate'."
-else
-  mkfs.ext4 $(pvesm path $_rootfs) &>/dev/null
-fi
 
 info "Creating LXC container..."
 _pct_options=(
@@ -178,9 +148,8 @@ _pct_options=(
   -rootfs $_rootfs,size=$_disk_size
   -storage $_storage
   -swap $_swap
-  -tags npm
 )
-pct create $_ctid "$_storage_template:vztmpl/$_template" ${_pct_options[@]} &>/dev/null \
+pct create $_ctid "/mnt/pve/ISO/template/cache/$_template" ${_pct_options[@]} &>/dev/null \
   || error "A problem occured while creating LXC container."
 
 # Set container timezone to match host
@@ -192,4 +161,5 @@ EOF
 info "Setting up LXC container..."
 pct start $_ctid
 sleep 3
+pct exec $_ctid -- sh -c "sysctl -w net.ipv6.conf.all.disable_ipv6=1; sysctl -w net.ipv6.conf.default.disable_ipv6=1"
 pct exec $_ctid -- sh -c "wget --no-cache -qO - $_raw_base/setup.sh | sh"
