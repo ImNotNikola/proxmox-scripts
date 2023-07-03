@@ -128,7 +128,7 @@ _disk_ref="$_ctid/"
 _disk_prefix="subvol"
 _disk_format="subvol"
 _disk="${_disk_prefix}-${_ctid}-disk-0"
-_rootfs=${_storage}:${_disk_ref-}${_disk}
+_rootfs=${_storage}:${_disk}
 
 # Create LXC
 info "Allocating storage for LXC container..."
